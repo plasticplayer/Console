@@ -11,110 +11,142 @@
 // Entrée #1 (GPA1, broche 22) est connectée sur bouton puis sur la masse 
 // par l'intermédiaire d'une résistance de 330 Ohms
 
-// Ajout MCHobby:
-// - Connectez la broche #18 du MCP23017 sur 5V (désactiver la ligne Reset)
-
 
 #include <Wire.h>
-#include "Adafruit_MCP23017.h"
-#include "def.h" // Include
+#include "def.h"
 #include "Communication.h"
 
 #define PIN_INTERRUPT_A 22
 #define PIN_INTERRUPT_B 24
 
-#define PORT_A 0
-#define PORT_B 255
+#define PORT_A 0x10
+#define PORT_B 0x11
+
 
 #define SPEED_SERIE 9600
-#define ENABLE_PULLUP HIGH
-
-#define NUMBER_MCP 6
-#define ADDRESS_MCP_MASTER 0b000
-#define ADDRESS_MCP_SLAVE1 0b001
-#define ADDRESS_MCP_SLAVE2 0b010
-#define ADDRESS_MCP_SLAVE3 0b011
-#define ADDRESS_MCP_SLAVE4 0b100
-#define ADDRESS_MCP_SLAVE5 0b101
-
-Adafruit_MCP23017 mcp[NUMBER_MCP];
-const int ADDRESS[NUMBER_MCP] = {ADDRESS_MCP_MASTER,ADDRESS_MCP_SLAVE1,ADDRESS_MCP_SLAVE2,ADDRESS_MCP_SLAVE3,ADDRESS_MCP_SLAVE4,ADDRESS_MCP_SLAVE5};
 
 
-void setup() {  
-  Serial.begin(SPEED_SERIE);
+#define NUMBER_MCP 2
+#define ADDRESS_MCP_MASTER 0x20
+#define ADDRESS_MCP_SLAVE1 0x21
+#define ADDRESS_MCP_SLAVE2 0x22
+#define ADDRESS_MCP_SLAVE3 0x23
+#define ADDRESS_MCP_SLAVE4 0x24
+#define ADDRESS_MCP_SLAVE5 0x25
+
+const int ADDRESS[] = {ADDRESS_MCP_SLAVE1, ADDRESS_MCP_SLAVE2,ADDRESS_MCP_SLAVE3,ADDRESS_MCP_SLAVE4,ADDRESS_MCP_SLAVE5};
+uint8_t value_port_A[NUMBER_MCP - 1];
+uint8_t value_port_B[NUMBER_MCP - 1];
+
+
+void setup() { 
   
-  // Initialisation of MCP
-  for(int i=0; i<NUMBER_MCP; i++){
-    mcp[i].begin(ADDRESS[i]);                     // Start communication with MCP
-    setAllPortToInput(mcp[i],ENABLE_PULLUP);      // Set ALL PORT TO INPUT AND
-    activateInterrup(ADDRESS[i]);
+  for (int i = 0; i < ( NUMBER_MCP - 1); i++) {  // Initialise table of value 
+    value_port_A[i] = 0x00;
+    value_port_B[i] = 0x00;
+  }  
+    
+  Wire.begin ();                                 // Initialise I2C
+  
+  
+  Serial.begin(SPEED_SERIE);                     // Initialise Serial
+  
+  
+  for(int i=0; i<NUMBER_MCP; i++){               // Configuration Slave
+      configureSlave(ADDRESS[i]);
   }
+  configureMaster(ADDRESS_MCP_MASTER);           // Configure Master
  
-  // Clear all interupt
   for(int i=0; i<NUMBER_MCP; i++){ 
-    clearInterrupt(ADDRESS[i]);                   // Clear all interrupt before launch program
+    clearInterrupt(ADDRESS[i]);                  // Clear all interrupt before launch program
   }
+  clearInterrupt(ADDRESS_MCP_MASTER);
 }
 
 void loop() {
-  int readGPIO_A = digitalRead(PIN_INTERRUPT_A);
-  int readGPIO_B = digitalRead(PIN_INTERRUPT_B);
-  int mcpAddress,mcpPort;
   uint8_t readGPIO;
   
-  
-  if( readGPIO_A == 1){
-    readGPIO = mcp[0].readGPIOAB();               // Read GPIO on port A to know witch MCP makes this interrupt
-    if( (readGPIO & 0x01) == 0x01 ){
-      readSlave(ADDRESS[1],PORT_A);
+  if( 1 == 1){ //digitalRead(PIN_INTERRUPT_A) == 0){                         // If interrupt detect on Port A
+   
+    readGPIO = expanderRead(ADDRESS_MCP_MASTER, PORT_A);          // Read value on GPIOA
+    
+    if( (readGPIO & 0x01) == 0 ){
+        readSlave(0,PORT_A);
     }
-    if( (readGPIO & 0x02) == 0x02 ){
-        readSlave(ADDRESS[1],PORT_B); 
+    if( (readGPIO & 0x02) == 0 ){
+        readSlave(0,PORT_B); 
     }
-    if( (readGPIO & 0x04) == 0x04 ){
-        readSlave(ADDRESS[2],PORT_A); 
+   /* if( (readGPIO & 0x04) == 0x04 ){
+        readSlave(1,PORT_A); 
     }
     if( (readGPIO & 0x08) == 0x08 ){
-        readSlave(ADDRESS[2],PORT_B); 
+        readSlave(1,PORT_B); 
     }
     if( (readGPIO & 0x10) == 0x10 ){
-      readSlave(ADDRESS[3],PORT_A);
+      readSlave(2, PORT_A);
     }
     if( (readGPIO & 0x20) == 0x20 ){
-        readSlave(ADDRESS[3],PORT_B); 
+        readSlave(2, PORT_B); 
     }
     if( (readGPIO & 0x40) == 0x40 ){
-        readSlave(ADDRESS[4],PORT_A); 
+        readSlave(3, PORT_A); 
     }
     if( (readGPIO & 0x80) == 0x80 ){
-        readSlave(ADDRESS[4],PORT_B); 
+        readSlave(3, PORT_B); 
     }
+    */
   }
-  if( readGPIO_B == 1){                            
-    readGPIO = mcp[0].readGPIOAB() >> 8;           // Read GPIO on port B to know witch MCP makes this interrupt
+  if( digitalRead(PIN_INTERRUPT_B) == 91){                        // If interrupt detect on Port B                            
+   
+    readGPIO = expanderRead(ADDRESS_MCP_MASTER, PORT_B);          // Read value on GPIOB
+    
+    Serial.println(readGPIO,BIN);
+    
      if( (readGPIO & 0x01) == 0x01 ){
-      readSlave(ADDRESS[5],PORT_A);
+        readSlave(4, PORT_A);
     }
     if( (readGPIO & 0x02) == 0x02 ){
-        readSlave(ADDRESS[5],PORT_B); 
+        readSlave(4, PORT_B); 
     }
     if( (readGPIO & 0x04) == 0x04 ){
-        readSlave(ADDRESS[6],PORT_A); 
+        readSlave(5, PORT_A); 
     }
     if( (readGPIO & 0x08) == 0x08 ){
-        readSlave(ADDRESS[6],PORT_B); 
+        readSlave(5, PORT_B); 
     }
   }
-  
-  
+  delay(10);
 }
 
-void readSlave(int mcpAddress, int port){
+void readSlave(int mcpNo, const byte port){
+   
+   uint8_t readGPIO, mask = 0x01;
+   uint8_t compareValue = (port == PORT_A ) ? value_port_A[ mcpNo ] : value_port_B[ mcpNo ] ;   // Get the last value read
+   
+   // Display debug
    Serial.print("Interrupt from :");
-   Serial.print(mcpAddress);
+   Serial.print( mcpNo );
    Serial.print(" on port: ");
-   Serial.println(port);
+   Serial.println( port );
+   
+   readGPIO = expanderRead( ADDRESS[mcpNo] , port);                          // Read GPIO
+   
+   for(int i = 0; i < 8 ; i++){                                             // For each bit
+       if( (readGPIO & mask) == mask && (compareValue & mask) == 0 ){       // Detect change 
+         Serial.print(i);
+         Serial.print(",");
+       }
+      mask = mask << 1; 
+   }
+   Serial.println("");
+   
+   if(port == PORT_A)                                                      // Update the last value of GPIO
+     value_port_A[ mcpNo - 1 ] = readGPIO;
+   else
+     value_port_B[ mcpNo - 1 ] = readGPIO;
+  
+   
+   clearInterrupt(ADDRESS[mcpNo]); 
 }
 
 

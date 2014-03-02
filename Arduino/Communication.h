@@ -1,6 +1,13 @@
-#include "Adafruit_MCP23017.h"
+#if defined(ARDUINO) && ARDUINO >= 100
+  #include "Arduino.h"
+#else
+  #include "WProgram.h"
+#endif
+
 #include <Wire.h>
 
-void clearInterrupt(int mcpAddress); 
-void activateInterrup(int mcpAddress);
-void setAllPortToInput(Adafruit_MCP23017 mcp, uint8_t enablePullUp);
+void configureSlave(const byte address);
+void configureMaster(const byte address);
+void clearInterrupt(const byte mcpAddress);
+unsigned int expanderRead(int address, byte data);
+
