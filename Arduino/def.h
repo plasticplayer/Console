@@ -1,3 +1,23 @@
+#define PIN_INTERRUPT_A 22
+#define PIN_INTERRUPT_B 24
+
+#define PRESS_CODE 0x31
+
+#define PORT_A 0x10
+#define PORT_B 0x11
+
+#define SPEED_SERIE 9600
+
+#define NUMBER_MCP 2
+
+#define ADDRESS_MCP_MASTER 0x20
+#define ADDRESS_MCP_SLAVE1 0x21
+#define ADDRESS_MCP_SLAVE2 0x22
+#define ADDRESS_MCP_SLAVE3 0x23
+#define ADDRESS_MCP_SLAVE4 0x24
+#define ADDRESS_MCP_SLAVE5 0x25
+
+
 /*** Button definition  ***/
 // LEFT CONTROL
 #define FIX

@@ -11,28 +11,29 @@
 // Entrée #1 (GPA1, broche 22) est connectée sur bouton puis sur la masse 
 // par l'intermédiaire d'une résistance de 330 Ohms
 
-
-#include <Wire.h>
 #include "def.h"
+
+
+// Ethernet
+#include <SPI.h>
+#include <Ethernet.h>
+#include <EthernetUdp.h>
+char packetBuffer[UDP_TX_PACKET_MAX_SIZE]; //buffer to hold incoming packet,
+EthernetUDP Udp;
+
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+unsigned int PORT_UDP = 8888;
+IPAddress ip(10, 1, 1, 177);
+IPAddress dest(10,1,1,70); 
+unsigned long noFrame = 0x0100;
+
+
+// MCP23017
+#include <Wire.h>
 #include "Communication.h"
 
-#define PIN_INTERRUPT_A 22
-#define PIN_INTERRUPT_B 24
+#include "crc16.h"
 
-#define PORT_A 0x10
-#define PORT_B 0x11
-
-
-#define SPEED_SERIE 9600
-
-
-#define NUMBER_MCP 2
-#define ADDRESS_MCP_MASTER 0x20
-#define ADDRESS_MCP_SLAVE1 0x21
-#define ADDRESS_MCP_SLAVE2 0x22
-#define ADDRESS_MCP_SLAVE3 0x23
-#define ADDRESS_MCP_SLAVE4 0x24
-#define ADDRESS_MCP_SLAVE5 0x25
 
 const int ADDRESS[] = {ADDRESS_MCP_SLAVE1, ADDRESS_MCP_SLAVE2,ADDRESS_MCP_SLAVE3,ADDRESS_MCP_SLAVE4,ADDRESS_MCP_SLAVE5};
 uint8_t value_port_A[NUMBER_MCP - 1];
@@ -40,17 +41,15 @@ uint8_t value_port_B[NUMBER_MCP - 1];
 
 
 void setup() { 
-  
+
   for (int i = 0; i < ( NUMBER_MCP - 1); i++) {  // Initialise table of value 
     value_port_A[i] = 0x00;
     value_port_B[i] = 0x00;
-  }  
+  }
     
-  Wire.begin ();                                 // Initialise I2C
+  Wire.begin();                                 // Initialise I2C
   
-  
-  Serial.begin(SPEED_SERIE);                     // Initialise Serial
-  
+  configurePcCommunication();
   
   for(int i=0; i<NUMBER_MCP; i++){               // Configuration Slave
       configureSlave(ADDRESS[i]);
@@ -60,15 +59,22 @@ void setup() {
   for(int i=0; i<NUMBER_MCP; i++){ 
     clearInterrupt(ADDRESS[i]);                  // Clear all interrupt before launch program
   }
+  
   clearInterrupt(ADDRESS_MCP_MASTER);
 }
 
+
+
+
+
 void loop() {
   uint8_t readGPIO;
-  
-  if( 1 == 1){ //digitalRead(PIN_INTERRUPT_A) == 0){                         // If interrupt detect on Port A
+  sendData(1,12);
+
+  /*if( digitalRead(PIN_INTERRUPT_A) == 0){                        // If interrupt detect on Port A
    
     readGPIO = expanderRead(ADDRESS_MCP_MASTER, PORT_A);          // Read value on GPIOA
+    //Serial.println(readGPIO,BIN);
     
     if( (readGPIO & 0x01) == 0 ){
         readSlave(0,PORT_A);
@@ -94,15 +100,15 @@ void loop() {
     if( (readGPIO & 0x80) == 0x80 ){
         readSlave(3, PORT_B); 
     }
-    */
+    
   }
-  if( digitalRead(PIN_INTERRUPT_B) == 91){                        // If interrupt detect on Port B                            
+  /*if( digitalRead(PIN_INTERRUPT_B)){                              // If interrupt detect on Port B                            
    
     readGPIO = expanderRead(ADDRESS_MCP_MASTER, PORT_B);          // Read value on GPIOB
     
     Serial.println(readGPIO,BIN);
     
-     if( (readGPIO & 0x01) == 0x01 ){
+    if( (readGPIO & 0x01) == 0x01 ){
         readSlave(4, PORT_A);
     }
     if( (readGPIO & 0x02) == 0x02 ){
@@ -115,38 +121,58 @@ void loop() {
         readSlave(5, PORT_B); 
     }
   }
-  delay(10);
+  */
+  //delay(10);
+  delay(2000);
 }
 
 void readSlave(int mcpNo, const byte port){
-   
+  clearInterrupt(ADDRESS[mcpNo]);
+  
    uint8_t readGPIO, mask = 0x01;
    uint8_t compareValue = (port == PORT_A ) ? value_port_A[ mcpNo ] : value_port_B[ mcpNo ] ;   // Get the last value read
    
-   // Display debug
-   Serial.print("Interrupt from :");
-   Serial.print( mcpNo );
-   Serial.print(" on port: ");
-   Serial.println( port );
-   
    readGPIO = expanderRead( ADDRESS[mcpNo] , port);                          // Read GPIO
    
-   for(int i = 0; i < 8 ; i++){                                             // For each bit
-       if( (readGPIO & mask) == mask && (compareValue & mask) == 0 ){       // Detect change 
-         Serial.print(i);
-         Serial.print(",");
+   for(int i = 0; i < 8 ; i++){                                               // For each bit
+       if( (readGPIO & mask) == mask && (compareValue & mask) == 0 ){         // Detect press 
+
+            sendData(mcpNo, (port&0x01)<<3 | (readGPIO & mask)  );              // Detect interrupt
+
+            mask = mask << 1; 
        }
-      mask = mask << 1; 
    }
-   Serial.println("");
    
    if(port == PORT_A)                                                      // Update the last value of GPIO
      value_port_A[ mcpNo - 1 ] = readGPIO;
    else
      value_port_B[ mcpNo - 1 ] = readGPIO;
-  
    
-   clearInterrupt(ADDRESS[mcpNo]); 
+   
+}
+
+
+void sendData(int mcpNo, int input){
+  noFrame++;
+  if(( noFrame & 0xff) == 0x00)
+      noFrame++;
+
+  char answer[] = {noFrame>>8, noFrame & 0xFF, PRESS_CODE, mcpNo, input,0,0,0x00} ;
+  
+  uint16_t crc16 = calc_crc16((unsigned char*) answer, 5);
+  answer[5] = crc16>>8 ; 
+  answer[6] = crc16 & 0xFF ; 
+  
+  Udp.beginPacket(dest, PORT_UDP);
+  Udp.write(answer);
+  Udp.endPacket();
+}
+
+void configurePcCommunication(){
+  Ethernet.begin(mac,ip);
+  Udp.begin(PORT_UDP);
+  
+  Serial.begin(9600);
 }
 
 

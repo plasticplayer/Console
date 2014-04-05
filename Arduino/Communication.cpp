@@ -66,7 +66,7 @@ void configureMaster(const byte address){
   expanderWriteBoth (address, IOCON, 0b01100000); // mirror interrupts, disable sequential mode
   
   // enable pull-up on switches
-  expanderWriteBoth (address, GPPUA, 0xFF);   // pull-up resistor for switch - both ports
+  //expanderWriteBoth (address, GPPUA, 0xFF);   // pull-up resistor for switch - both ports
  
   // invert polarity
   expanderWriteBoth (address, IOPOLA, 0x00);  // invert polarity of signal - both ports
